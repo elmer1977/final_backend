@@ -43,6 +43,7 @@ const allowedOrigins = [
   "http://localhost:3001",
   "http://127.0.0.1:3000",
   "https://backend-uc5x.onrender.com",
+  "https://elmer1977.github.io",
 ].filter(Boolean);
 
 app.use(
