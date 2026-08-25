@@ -76,6 +76,22 @@ app.set("trust proxy", 1);
 
 app.use("/", express.static("uploads"));
 
+// Temporary diagnostic endpoint to check CORS behavior. Remove after debugging.
+app.get('/cors-check', (req, res) => {
+  const origin = req.headers.origin || '';
+  // If origin is allowed, echo it back; otherwise return received origin for debugging
+  if (allowedOrigins.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    res.setHeader('Access-Control-Expose-Headers', 'Access-Control-Allow-Origin,Access-Control-Allow-Credentials');
+  } else {
+    // still provide debugging headers for visibility
+    res.setHeader('Access-Control-Allow-Origin', origin || 'none');
+    res.setHeader('Access-Control-Allow-Credentials', 'false');
+  }
+  res.json({ ok: true, originReceived: origin, allowedOrigins });
+});
+
 app.get("/test", (req, res) => {
   res.send("Hello World!");
 });
