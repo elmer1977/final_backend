@@ -49,7 +49,7 @@ router.post("/create-user", upload.single("file"), async (req, res, next) => {
 
     const activationToken = createActivationToken(user);
 
-    const activationUrl = `https://p4brrcnh-3000.asse.devtunnels.ms/activation/${activationToken}`;
+    const activationUrl = `${process.env.FRONTEND_URL || 'https://p4brrcnh-3000.asse.devtunnels.ms'}/#/activation/${activationToken}`;
 
     // send email to user
     try {
@@ -175,7 +175,7 @@ router.post(
 
       await user.save();
 
-      const resetUrl = `https://p4brrcnh-3000.asse.devtunnels.ms/reset-password/${resetToken}`;
+      const resetUrl = `${process.env.FRONTEND_URL || 'https://p4brrcnh-3000.asse.devtunnels.ms'}/#/reset-password/${resetToken}`;
 
       await sendMail({
         email: user.email,
@@ -293,6 +293,8 @@ router.get(
       res.cookie("token", null, {
         expires: new Date(Date.now()),
         httpOnly: true,
+        sameSite: "none",
+        secure: true,
       });
       res.status(201).json({
         success: true,

@@ -51,7 +51,7 @@ router.post("/create-shop", upload.single("file"), async (req, res, next) => {
 
     const activationToken = createActivationToken(seller);
 
-    const activationUrl = `https://p4brrcnh-3000.asse.devtunnels.ms/seller/activation/${activationToken}`;
+    const activationUrl = `${process.env.FRONTEND_URL || 'https://p4brrcnh-3000.asse.devtunnels.ms'}/#/seller/activation/${activationToken}`;
 
     try {
       await sendMail({
@@ -181,7 +181,7 @@ router.post(
 
       await seller.save();
 
-      const resetUrl = `https://p4brrcnh-3000.asse.devtunnels.ms/shop/reset-password/${resetToken}`;
+      const resetUrl = `${process.env.FRONTEND_URL || 'https://p4brrcnh-3000.asse.devtunnels.ms'}/#/shop/reset-password/${resetToken}`;
 
       await sendMail({
         email: seller.email,
@@ -300,6 +300,8 @@ router.get(
       res.cookie("seller_token", null, {
         expires: new Date(Date.now()),
         httpOnly: true,
+        sameSite: "none",
+        secure: true,
       });
       res.status(201).json({
         success: true,
