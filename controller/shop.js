@@ -297,13 +297,13 @@ router.get(
   "/logout",
   catchAsyncErrors(async (req, res, next) => {
     try {
-      res.cookie("seller_token", null, {
-        expires: new Date(Date.now()),
+      res.clearCookie("seller_token", {
+        path: "/",
         httpOnly: true,
         sameSite: "none",
         secure: true,
       });
-      res.status(201).json({
+      res.status(200).json({
         success: true,
         message: "Log out successful!",
       });
