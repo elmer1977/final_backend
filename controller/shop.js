@@ -297,12 +297,13 @@ router.get(
   "/logout",
   catchAsyncErrors(async (req, res, next) => {
     try {
-      res.clearCookie("seller_token", {
+      const cookieOptions = {
         path: "/",
         httpOnly: true,
-        sameSite: "none",
-        secure: true,
-      });
+        sameSite: process.env.NODE_ENV && process.env.NODE_ENV.toLowerCase() === "production" ? "none" : "lax",
+        secure: process.env.NODE_ENV && process.env.NODE_ENV.toLowerCase() === "production",
+      };
+      res.clearCookie("seller_token", cookieOptions);
       res.status(200).json({
         success: true,
         message: "Log out successful!",

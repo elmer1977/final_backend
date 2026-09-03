@@ -9,7 +9,7 @@ const bodyParser = require("body-parser");
 const cors = require("cors");
 const path = require("path");
 
-const isProduction = process.env.NODE_ENV === "PRODUCTION";
+const isProduction = process.env.NODE_ENV && process.env.NODE_ENV.toLowerCase() === "production";
 
 if (!isProduction && fs.existsSync("config/.env")) {
   require("dotenv").config({
