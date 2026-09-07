@@ -2,7 +2,9 @@
 const sendShopToken = (user, statusCode, res) => {
   const token = user.getJwtToken();
 
-  const isProduction = process.env.NODE_ENV && process.env.NODE_ENV.toLowerCase() === "production";
+  const isProduction =
+    process.env.NODE_ENV?.toLowerCase() === "production" ||
+    process.env.FRONTEND_URL?.startsWith("https://");
 
   // Options for cookies
   const options = {

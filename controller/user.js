@@ -293,10 +293,16 @@ router.get(
       const cookieOptions = {
         expires: new Date(Date.now()),
         httpOnly: true,
-        sameSite: process.env.NODE_ENV && process.env.NODE_ENV.toLowerCase() === "production" ? "none" : "lax",
-        secure: process.env.NODE_ENV && process.env.NODE_ENV.toLowerCase() === "production",
+        sameSite:
+          process.env.NODE_ENV?.toLowerCase() === "production" ||
+          process.env.FRONTEND_URL?.startsWith("https://")
+            ? "none"
+            : "lax",
+        secure:
+          process.env.NODE_ENV?.toLowerCase() === "production" ||
+          process.env.FRONTEND_URL?.startsWith("https://"),
       };
-      res.cookie("token", null, cookieOptions);
+      res.clearCookie("token", cookieOptions);
       res.status(201).json({
         success: true,
         message: "Log out successful!",

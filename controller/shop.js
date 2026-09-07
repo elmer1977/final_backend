@@ -300,8 +300,14 @@ router.get(
       const cookieOptions = {
         path: "/",
         httpOnly: true,
-        sameSite: process.env.NODE_ENV && process.env.NODE_ENV.toLowerCase() === "production" ? "none" : "lax",
-        secure: process.env.NODE_ENV && process.env.NODE_ENV.toLowerCase() === "production",
+        sameSite:
+          process.env.NODE_ENV?.toLowerCase() === "production" ||
+          process.env.FRONTEND_URL?.startsWith("https://")
+            ? "none"
+            : "lax",
+        secure:
+          process.env.NODE_ENV?.toLowerCase() === "production" ||
+          process.env.FRONTEND_URL?.startsWith("https://"),
       };
       res.clearCookie("seller_token", cookieOptions);
       res.status(200).json({
