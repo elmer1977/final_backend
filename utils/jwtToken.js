@@ -5,7 +5,8 @@ const sendToken = (user, statusCode, res) => {
 
   const isProduction =
     process.env.NODE_ENV?.toLowerCase() === "production" ||
-    process.env.FRONTEND_URL?.startsWith("https://");
+    process.env.FRONTEND_URL?.startsWith("https://") ||
+    res.req?.headers.origin?.startsWith("https://");
 
   // Options for cookies
   const options = {
