@@ -6,7 +6,11 @@ const Shop = require("../model/shop");
 
 // Check if user is authenticated or not
 exports.isAuthenticated = catchAsyncErrors(async (req, res, next) => {
-  const { token } = req.cookies;
+  const token =
+    req.cookies.token ||
+    (req.headers.authorization &&
+      req.headers.authorization.startsWith("Bearer ") &&
+      req.headers.authorization.slice(7));
   if (!token) {
     return next(new ErrorHandler("Please login to continue", 401));
   }
@@ -17,7 +21,8 @@ exports.isAuthenticated = catchAsyncErrors(async (req, res, next) => {
 });
 
 exports.isSeller = catchAsyncErrors(async (req, res, next) => {
-  const { seller_token } = req.cookies;
+  const seller_token =
+    req.cookies.seller_token || req.headers["x-seller-token"];
   if (!seller_token) {
     return next(new ErrorHandler("Please login to continue", 401));
   }
