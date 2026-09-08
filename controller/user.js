@@ -15,6 +15,7 @@ const {
     generateResetToken,
     hashResetToken,
 } = require("../utils/passwordReset");
+const { frontendUrl } = require("../utils/frontendUrl");
 
 const router = express.Router();
 
@@ -49,7 +50,7 @@ router.post("/create-user", upload.single("file"), async (req, res, next) => {
 
     const activationToken = createActivationToken(user);
 
-    const activationUrl = `${process.env.FRONTEND_URL || 'https://p4brrcnh-3000.asse.devtunnels.ms'}/#/activation/${activationToken}`;
+    const activationUrl = `${frontendUrl}/#/activation/${activationToken}`;
 
     // send email to user
     try {
@@ -175,7 +176,7 @@ router.post(
 
       await user.save();
 
-      const resetUrl = `${process.env.FRONTEND_URL || 'https://p4brrcnh-3000.asse.devtunnels.ms'}/#/reset-password/${resetToken}`;
+      const resetUrl = `${frontendUrl}/#/reset-password/${resetToken}`;
 
       await sendMail({
         email: user.email,

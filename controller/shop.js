@@ -17,6 +17,7 @@ const {
     generateResetToken,
     hashResetToken,
 } = require("../utils/passwordReset");
+const { frontendUrl } = require("../utils/frontendUrl");
 
 // create shop
 router.post("/create-shop", upload.single("file"), async (req, res, next) => {
@@ -51,7 +52,7 @@ router.post("/create-shop", upload.single("file"), async (req, res, next) => {
 
     const activationToken = createActivationToken(seller);
 
-    const activationUrl = `${process.env.FRONTEND_URL || 'https://p4brrcnh-3000.asse.devtunnels.ms'}/#/seller/activation/${activationToken}`;
+    const activationUrl = `${frontendUrl}/#/seller/activation/${activationToken}`;
 
     try {
       await sendMail({
@@ -181,7 +182,7 @@ router.post(
 
       await seller.save();
 
-      const resetUrl = `${process.env.FRONTEND_URL || 'https://p4brrcnh-3000.asse.devtunnels.ms'}/#/shop/reset-password/${resetToken}`;
+      const resetUrl = `${frontendUrl}/#/shop/reset-password/${resetToken}`;
 
       await sendMail({
         email: seller.email,

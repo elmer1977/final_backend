@@ -8,6 +8,7 @@ const cookieParser = require("cookie-parser");
 const bodyParser = require("body-parser");
 const cors = require("cors");
 const path = require("path");
+const { frontendOrigin } = require("./utils/frontendUrl");
 
 const isProduction = process.env.NODE_ENV && process.env.NODE_ENV.toLowerCase() === "production";
 
@@ -36,7 +37,7 @@ app.use(express.json());
 app.use(cookieParser());
 
 const allowedOrigins = [
-  process.env.FRONTEND_URL,
+  frontendOrigin,
   process.env.CLIENT_URL,
   process.env.REACT_APP_CLIENT_URL,
   "http://localhost:3000",
