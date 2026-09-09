@@ -18,6 +18,7 @@ const {
     hashResetToken,
 } = require("../utils/passwordReset");
 const { frontendUrl } = require("../utils/frontendUrl");
+const { getUploadedFileUrl, deleteUploadedFile } = require("../utils/uploadedFile");
 
 // create shop
 router.post("/create-shop", upload.single("file"), async (req, res, next) => {
@@ -26,19 +27,11 @@ router.post("/create-shop", upload.single("file"), async (req, res, next) => {
     const sellerEmail = await Shop.findOne({ email });
 
     if (sellerEmail) {
-      const filename = req.file.filename;
-      const filePath = `uploads/${filename}`;
-      fs.unlink(filePath, (err) => {
-        if (err) {
-          console.log(err);
-          res.status(500).json({ message: "Error deleting file" });
-        }
-      });
+      await deleteUploadedFile(getUploadedFileUrl(req.file));
       return next(new ErrorHandler("User already exists", 400));
     }
 
-    const filename = req.file.filename;
-    const fileUrl = path.join(filename);
+    const fileUrl = getUploadedFileUrl(req.file);
 
     const seller = {
       name: req.body.name,
@@ -348,11 +341,8 @@ router.put(
     try {
       const existsUser = await Shop.findById(req.seller._id);
 
-      const existAvatarPath = `uploads/${existsUser.avatar}`;
-
-      fs.unlinkSync(existAvatarPath);
-
-      const fileUrl = path.join(req.file.filename);
+      await deleteUploadedFile(existsUser.avatar);
+      const fileUrl = getUploadedFileUrl(req.file);
 
       const seller = await Shop.findByIdAndUpdate(req.seller._id, {
         avatar: fileUrl,

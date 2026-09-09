@@ -5,6 +5,7 @@ const express = require("express");
 const { upload } = require("../multer");
 const router = express.Router();
 const path = require("path");
+const { getUploadedFileUrl } = require("../utils/uploadedFile");
 
 // create new message
 router.post(
@@ -15,8 +16,7 @@ router.post(
       const messageData = req.body;
 
       if (req.file) {
-        const filename = req.file.filename;
-        const fileUrl = path.join(filename);
+        const fileUrl = getUploadedFileUrl(req.file);
         messageData.images = fileUrl;
       }
 

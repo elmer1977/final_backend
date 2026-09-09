@@ -16,6 +16,7 @@ const {
     hashResetToken,
 } = require("../utils/passwordReset");
 const { frontendUrl } = require("../utils/frontendUrl");
+const { getUploadedFileUrl, deleteUploadedFile } = require("../utils/uploadedFile");
 
 const router = express.Router();
 
@@ -26,20 +27,12 @@ router.post("/create-user", upload.single("file"), async (req, res, next) => {
 
     if (userEmail) {
       // if user already exits account is not create and file is deleted
-      const filename = req.file.filename;
-      const filePath = `uploads/${filename}`;
-      fs.unlink(filePath, (err) => {
-        if (err) {
-          console.log(err);
-          res.status(500).json({ message: "Error deleting file" });
-        }
-      });
+      await deleteUploadedFile(getUploadedFileUrl(req.file));
 
       return next(new ErrorHandler("User already exits", 400));
     }
 
-    const filename = req.file.filename;
-    const fileUrl = path.join(filename);
+    const fileUrl = getUploadedFileUrl(req.file);
 
     const user = {
       name: name,
@@ -368,11 +361,8 @@ router.put(
     try {
       const existsUser = await User.findById(req.user.id);
 
-      const existAvatarPath = `uploads/${existsUser.avatar}`;
-
-      fs.unlinkSync(existAvatarPath); // Delete Priviuse Image
-
-      const fileUrl = path.join(req.file.filename); // new image
+      await deleteUploadedFile(existsUser.avatar);
+      const fileUrl = getUploadedFileUrl(req.file);
 
       /* The code `const user = await User.findByIdAndUpdate(req.user.id, { avatar: fileUrl });` is
         updating the avatar field of the user with the specified `req.user.id`. It uses the
@@ -533,9 +523,7 @@ router.post(
       const existingUser = await User.findOne({ email });
       if (existingUser) {
         if (req.file) {
-          const filename = req.file.filename;
-          const filePath = `uploads/${filename}`;
-          fs.unlink(filePath, () => {});
+          await deleteUploadedFile(req.file.path || req.file.filename);
         }
         return next(new ErrorHandler("User already exists", 400));
       }
@@ -544,8 +532,7 @@ router.post(
         return next(new ErrorHandler("User avatar is required", 400));
       }
 
-      const filename = req.file.filename;
-      const fileUrl = path.join(filename);
+      const fileUrl = getUploadedFileUrl(req.file);
 
       const user = await User.create({
         name,
