@@ -341,7 +341,16 @@ router.put(
     try {
       const existsUser = await Shop.findById(req.seller._id);
 
-      await deleteUploadedFile(existsUser.avatar);
+      if (!req.file) {
+        return next(new ErrorHandler("Avatar upload failed", 400));
+      }
+
+      try {
+        await deleteUploadedFile(existsUser?.avatar);
+      } catch (error) {
+        console.warn("Previous shop avatar cleanup failed:", error.message);
+      }
+
       const fileUrl = getUploadedFileUrl(req.file);
 
       const seller = await Shop.findByIdAndUpdate(req.seller._id, {

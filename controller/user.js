@@ -361,7 +361,16 @@ router.put(
     try {
       const existsUser = await User.findById(req.user.id);
 
-      await deleteUploadedFile(existsUser.avatar);
+      if (!req.file) {
+        return next(new ErrorHandler("Avatar upload failed", 400));
+      }
+
+      try {
+        await deleteUploadedFile(existsUser?.avatar);
+      } catch (error) {
+        console.warn("Previous avatar cleanup failed:", error.message);
+      }
+
       const fileUrl = getUploadedFileUrl(req.file);
 
       /* The code `const user = await User.findByIdAndUpdate(req.user.id, { avatar: fileUrl });` is
