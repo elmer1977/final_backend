@@ -29,26 +29,61 @@ router.post(
 
       // create an order for each shop
       const orders = [];
+      const reservedStock = [];
 
-      for (const [shopId, items] of shopItemsMap) {
-        const order = await Order.create({
-          cart: items,
-          shippingAddress,
-          user,
-          totalPrice,
-          paymentInfo,
-        });
-        orders.push(order);
+      try {
+        for (const [shopId, items] of shopItemsMap) {
+          for (const item of items) {
+            const product = await Product.findOneAndUpdate(
+              { _id: item._id, stock: { $gte: item.qty } },
+              { $inc: { stock: -item.qty, sold_out: item.qty } },
+              { new: true }
+            );
 
-        const shop = await Shop.findById(shopId);
-        if (shop?.pushSubscription) {
-          await sendPushNotification(shop.pushSubscription, {
-            title: "New order received",
-            body: `You have a new order from ${user?.name || "a customer"}`,
-            url: "/dashboard-orders",
-            orderId: order._id,
+            if (!product) {
+              throw new Error(
+                `${item.name || "A product"} does not have enough stock available`
+              );
+            }
+
+            reservedStock.push({ productId: item._id, quantity: item.qty });
+          }
+        }
+
+        for (const [shopId, items] of shopItemsMap) {
+          const order = await Order.create({
+            cart: items,
+            shippingAddress,
+            user,
+            totalPrice,
+            paymentInfo,
+          });
+          orders.push(order);
+
+          const shop = await Shop.findById(shopId);
+          if (shop?.pushSubscription) {
+            await sendPushNotification(shop.pushSubscription, {
+              title: "New order received",
+              body: `You have a new order from ${user?.name || "a customer"}`,
+              url: "/dashboard-orders",
+              orderId: order._id,
+            });
+          }
+        }
+      } catch (error) {
+        if (orders.length) {
+          await Order.deleteMany({
+            _id: { $in: orders.map((order) => order._id) },
           });
         }
+        await Promise.all(
+          reservedStock.map(({ productId, quantity }) =>
+            Product.findByIdAndUpdate(productId, {
+              $inc: { stock: quantity, sold_out: -quantity },
+            })
+          )
+        );
+        throw error;
       }
 
       res.status(201).json({
@@ -115,12 +150,6 @@ router.put(
 
       const userToNotify = await User.findById(order.user._id);
 
-      if (req.body.status === "Transferred to delivery partner") {
-        order.cart.forEach(async (o) => {
-          await updateOrder(o._id, o.qty);
-        });
-      }
-
       order.status = req.body.status;
 
       if (req.body.status === "Delivered") {
@@ -145,15 +174,6 @@ router.put(
         success: true,
         order,
       });
-
-      async function updateOrder(id, qty) {
-        const product = await Product.findById(id);
-
-        product.stock -= qty;
-        product.sold_out += qty;
-
-        await product.save({ validateBeforeSave: false });
-      }
 
       async function updateSellerInfo(amount) {
         const seller = await Shop.findById(req.seller.id);
