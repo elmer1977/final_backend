@@ -400,6 +400,49 @@ router.put(
 );
 
 // all sellers --- for admin
+router.put(
+  "/admin/update-seller/:id",
+  isAuthenticated,
+  isAdmin("Admin"),
+  catchAsyncErrors(async (req, res, next) => {
+    try {
+      const { name, email, description, address, phoneNumber, zipCode } =
+        req.body;
+      const seller = await Shop.findById(req.params.id);
+
+      if (!seller) {
+        return next(new ErrorHandler("Seller not found", 400));
+      }
+
+      if (email && email !== seller.email) {
+        const emailTaken = await Shop.findOne({
+          email,
+          _id: { $ne: seller._id },
+        });
+        if (emailTaken) {
+          return next(new ErrorHandler("Email already in use", 400));
+        }
+      }
+
+      seller.name = name || seller.name;
+      seller.email = email || seller.email;
+      seller.description = description ?? seller.description;
+      seller.address = address || seller.address;
+      seller.phoneNumber = phoneNumber || seller.phoneNumber;
+      seller.zipCode = zipCode || seller.zipCode;
+
+      await seller.save();
+
+      res.status(200).json({
+        success: true,
+        seller,
+      });
+    } catch (error) {
+      return next(new ErrorHandler(error.message, 500));
+    }
+  })
+);
+
 router.get(
   "/admin-all-sellers",
   isAuthenticated,
