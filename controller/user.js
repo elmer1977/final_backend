@@ -2,6 +2,7 @@ const express = require("express");
 const path = require("path");
 const crypto = require("crypto");
 const User = require("../model/user");
+const Shop = require("../model/shop");
 const { upload } = require("../multer");
 const ErrorHandler = require("../utils/ErrorHandler");
 const fs = require("fs");
@@ -697,18 +698,42 @@ router.get(
       const oldestAdmin = await User.findOne({ role: "Admin" })
         .sort({ createdAt: 1, _id: 1 })
         .select("_id");
-      users.sort((a, b) => {
-        if (a.role === "Admin" && b.role !== "Admin") return -1;
-        if (b.role === "Admin" && a.role !== "Admin") return 1;
-        return 0;
+      const sellers = await Shop.find().sort({ createdAt: 1, _id: 1 });
+      const userRows = users.map((user) => {
+        const isProtectedAdmin = oldestAdmin?._id.equals(user._id) || false;
+        return {
+          ...user.toObject(),
+          entityType: "user",
+          displayRole: isProtectedAdmin
+            ? "Super Admin"
+            : user.role === "Admin"
+              ? "Admin"
+              : "Customer",
+          isProtectedAdmin,
+        };
       });
-      const userRows = users.map((user) => ({
-        ...user.toObject(),
-        isProtectedAdmin: oldestAdmin?._id.equals(user._id) || false,
+      const sellerRows = sellers.map((seller) => ({
+        ...seller.toObject(),
+        entityType: "seller",
+        displayRole: "Seller",
+        isProtectedAdmin: false,
       }));
+      const allAccounts = [...userRows, ...sellerRows].sort((a, b) => {
+        const roleOrder = {
+          "Super Admin": 0,
+          Admin: 1,
+          Seller: 2,
+          Customer: 3,
+        };
+        return (
+          roleOrder[a.displayRole] - roleOrder[b.displayRole] ||
+          new Date(a.createdAt) - new Date(b.createdAt) ||
+          String(a._id).localeCompare(String(b._id))
+        );
+      });
       res.status(201).json({
         success: true,
-        users: userRows,
+        users: allAccounts,
       });
     } catch (error) {
       return next(new ErrorHandler(error.message, 500));
