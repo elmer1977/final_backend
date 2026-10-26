@@ -34,14 +34,18 @@ router.post("/create-user", upload.single("file"), async (req, res, next) => {
 
     const fileUrl = getUploadedFileUrl(req.file);
 
-    const user = {
+    const user = await User.create({
       name: name,
       email: email,
       password: password,
       avatar: fileUrl,
-    };
+      isActivated: false,
+    });
 
-    const activationToken = createActivationToken(user);
+    const activationToken = createActivationToken({
+      id: user._id,
+      purpose: "user-activation",
+    });
 
     const activationUrl = `${frontendUrl}/#/activation/${activationToken}`;
 
@@ -66,10 +70,8 @@ router.post("/create-user", upload.single("file"), async (req, res, next) => {
 
 // create activation token
 const createActivationToken = (user) => {
-  // why use create activatetoken?
-  // to create a token for the user to activate their account  after they register
   return jwt.sign(user, process.env.ACTIVATION_SECRET, {
-    expiresIn: "5m",
+    expiresIn: "24h",
   });
 };
 
@@ -87,19 +89,32 @@ router.post(
       if (!newUser) {
         return next(new ErrorHandler("Invalid token", 400));
       }
-      const { name, email, password, avatar } = newUser;
-
-      let user = await User.findOne({ email });
-
-      if (user) {
-        return next(new ErrorHandler("User already exists", 400));
+      let user;
+      if (newUser.purpose === "user-activation" && newUser.id) {
+        user = await User.findById(newUser.id);
+        if (!user) {
+          return next(new ErrorHandler("Activation account not found", 404));
+        }
+        user.isActivated = true;
+        await user.save();
+      } else {
+        const { name, email, password, avatar } = newUser;
+        user = await User.findOne({ email });
+        if (!user) {
+          user = await User.create({
+            name,
+            email,
+            avatar,
+            password,
+            isActivated: true,
+          });
+        } else if (user.isActivated === false) {
+          user.isActivated = true;
+          await user.save();
+        } else {
+          return next(new ErrorHandler("User already exists", 400));
+        }
       }
-      user = await User.create({
-        name,
-        email,
-        avatar,
-        password,
-      });
       sendToken(user, 201, res);
     } catch (error) {
       return next(new ErrorHandler(error.message, 500));
@@ -132,7 +147,60 @@ router.post(
           new ErrorHandler("Please provide the correct inforamtions", 400)
         );
       }
+
+      if (user.isActivated === false) {
+        return res.status(403).json({
+          success: false,
+          code: "ACCOUNT_NOT_ACTIVATED",
+          message: "Your account has not been activated yet.",
+        });
+      }
+
       sendToken(user, 201, res);
+    } catch (error) {
+      return next(new ErrorHandler(error.message, 500));
+    }
+  })
+);
+
+// resend activation email for an inactive account
+router.post(
+  "/resend-activation",
+  catchAsyncErrors(async (req, res, next) => {
+    try {
+      const { email, password } = req.body;
+      if (!email || !password) {
+        return next(new ErrorHandler("Please provide your email and password", 400));
+      }
+
+      const user = await User.findOne({ email }).select("+password");
+      if (!user || user.isActivated !== false) {
+        return next(
+          new ErrorHandler("Unable to resend activation email for this account", 400)
+        );
+      }
+
+      const passwordMatches = await user.comparePassword(password);
+      if (!passwordMatches) {
+        return next(new ErrorHandler("Please provide the correct information", 400));
+      }
+
+      const activationToken = createActivationToken({
+        id: user._id,
+        purpose: "user-activation",
+      });
+      const activationUrl = `${frontendUrl}/#/activation/${activationToken}`;
+
+      await sendMail({
+        email: user.email,
+        subject: "Activate your account",
+        message: `Hello ${user.name}, please click on the link to activate your account: ${activationUrl}`,
+      });
+
+      res.status(200).json({
+        success: true,
+        message: `Activation email sent to ${user.email}`,
+      });
     } catch (error) {
       return next(new ErrorHandler(error.message, 500));
     }
