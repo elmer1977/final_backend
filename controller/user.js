@@ -644,6 +644,20 @@ router.put(
         return next(new ErrorHandler("User not found", 400));
       }
 
+      const oldestAdmin = await User.findOne({ role: "Admin" })
+        .sort({ createdAt: 1, _id: 1 })
+        .select("_id");
+      const isProtectedAdmin = oldestAdmin?._id.equals(user._id);
+
+      if (role !== undefined && !["Admin", "user"].includes(role)) {
+        return next(new ErrorHandler("Invalid user role", 400));
+      }
+      if (isProtectedAdmin && role !== undefined && role !== "Admin") {
+        return next(
+          new ErrorHandler("The oldest admin's role cannot be changed", 400)
+        );
+      }
+
       if (email && email !== user.email) {
         const emailTaken = await User.findOne({ email });
         if (emailTaken) {
@@ -654,7 +668,9 @@ router.put(
       user.name = name || user.name;
       user.email = email || user.email;
       user.phoneNumber = phoneNumber || user.phoneNumber;
-      user.role = role || user.role;
+      if (role !== undefined) {
+        user.role = role;
+      }
 
       await user.save();
 
@@ -678,14 +694,21 @@ router.get(
       const users = await User.find().sort({
         createdAt: -1,
       });
+      const oldestAdmin = await User.findOne({ role: "Admin" })
+        .sort({ createdAt: 1, _id: 1 })
+        .select("_id");
       users.sort((a, b) => {
         if (a.role === "Admin" && b.role !== "Admin") return -1;
         if (b.role === "Admin" && a.role !== "Admin") return 1;
         return 0;
       });
+      const userRows = users.map((user) => ({
+        ...user.toObject(),
+        isProtectedAdmin: oldestAdmin?._id.equals(user._id) || false,
+      }));
       res.status(201).json({
         success: true,
-        users,
+        users: userRows,
       });
     } catch (error) {
       return next(new ErrorHandler(error.message, 500));
@@ -708,9 +731,13 @@ router.delete(
         );
       }
 
-      if (user.role === "Admin") {
+      const oldestAdmin = await User.findOne({ role: "Admin" })
+        .sort({ createdAt: 1, _id: 1 })
+        .select("_id");
+
+      if (oldestAdmin?._id.equals(user._id)) {
         return next(
-          new ErrorHandler("Admin users cannot be deleted", 400)
+          new ErrorHandler("The oldest admin cannot be deleted", 400)
         );
       }
 
