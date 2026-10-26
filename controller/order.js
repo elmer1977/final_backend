@@ -57,6 +57,7 @@ router.post(
             user,
             totalPrice,
             paymentInfo,
+            status: "Pending",
           });
           orders.push(order);
 
@@ -142,46 +143,215 @@ router.put(
   isSeller,
   catchAsyncErrors(async (req, res, next) => {
     try {
-      const order = await Order.findById(req.params.id);
-
-      if (!order) {
-        return next(new ErrorHandler("Order not found with this id", 400));
+      const allowedStatuses = [
+        "Pending",
+        "Processing",
+        "Transferred to delivery partner",
+        "Shipping",
+        "Received",
+        "On the way",
+        "Delivered",
+      ];
+      if (!allowedStatuses.includes(req.body.status)) {
+        return next(new ErrorHandler("Invalid order status", 400));
       }
 
-      const userToNotify = await User.findById(order.user._id);
+      const existingOrder = await Order.findOne({
+        _id: req.params.id,
+        "cart.shopId": req.seller._id,
+      });
 
-      order.status = req.body.status;
+      if (!existingOrder) {
+        return next(new ErrorHandler("Order not found for this shop", 404));
+      }
+
+      if (
+        ["Cancelled", "Processing refund", "Refund Success"].includes(
+          existingOrder.status
+        )
+      ) {
+        return next(new ErrorHandler("This order can no longer be updated", 400));
+      }
+
+      const currentStatusIndex = allowedStatuses.indexOf(existingOrder.status);
+      const requestedStatusIndex = allowedStatuses.indexOf(req.body.status);
+      if (
+        currentStatusIndex !== -1 &&
+        requestedStatusIndex < currentStatusIndex
+      ) {
+        return next(new ErrorHandler("Order status cannot move backwards", 400));
+      }
+
+      const statusUpdate = { status: req.body.status };
+      if (req.body.status === "Delivered") {
+        statusUpdate.deliveredAt = Date.now();
+        statusUpdate["paymentInfo.status"] = "Succeeded";
+      }
+
+      const updatedOrder = await Order.findOneAndUpdate(
+        {
+          _id: existingOrder._id,
+          "cart.shopId": req.seller._id,
+          status: existingOrder.status,
+        },
+        { $set: statusUpdate },
+        { new: true }
+      );
+
+      if (!updatedOrder) {
+        return next(
+          new ErrorHandler("Order status changed. Refresh and try again.", 409)
+        );
+      }
+
+      const userToNotify = await User.findById(updatedOrder.user._id);
 
       if (req.body.status === "Delivered") {
-        order.deliveredAt = Date.now();
-        order.paymentInfo.status = "Succeeded";
-        const serviceCharge = order.totalPrice * 0.1;
-        await updateSellerInfo(order.totalPrice - serviceCharge);
+        const serviceCharge = updatedOrder.totalPrice * 0.1;
+        await updateSellerInfo(updatedOrder.totalPrice - serviceCharge);
       }
-
-      await order.save({ validateBeforeSave: false });
 
       if (userToNotify?.pushSubscription) {
         await sendPushNotification(userToNotify.pushSubscription, {
           title: "Order status updated",
-          body: `Your order ${order._id} is now ${order.status}`,
-          url: `/user/order/${order._id}`,
-          orderId: order._id,
+          body: `Your order ${updatedOrder._id} is now ${updatedOrder.status}`,
+          url: `/user/order/${updatedOrder._id}`,
+          orderId: updatedOrder._id,
         });
       }
 
       res.status(200).json({
         success: true,
-        order,
+        order: updatedOrder,
       });
 
       async function updateSellerInfo(amount) {
         const seller = await Shop.findById(req.seller.id);
-
+        if (!seller) {
+          throw new ErrorHandler("Seller not found", 404);
+        }
         seller.availableBalance = amount;
-
         await seller.save();
       }
+    } catch (error) {
+      return next(new ErrorHandler(error.message, 500));
+    }
+  })
+);
+
+// cancel an order before it is on the way
+router.put(
+  "/cancel-order/:id",
+  isAuthenticated,
+  catchAsyncErrors(async (req, res, next) => {
+    try {
+      const order = await Order.findOne({
+        _id: req.params.id,
+        "user._id": req.user._id,
+      });
+
+      if (!order) {
+        return next(new ErrorHandler("Order not found", 404));
+      }
+
+      const cancellableStatuses = [
+        "Pending",
+        "Processing",
+        "Transferred to delivery partner",
+        "Shipping",
+        "Received",
+      ];
+      if (!cancellableStatuses.includes(order.status)) {
+        return next(
+          new ErrorHandler(
+            "This order can no longer be cancelled because it is already on the way or completed",
+            400
+          )
+        );
+      }
+
+      const cancelledOrder = await Order.findOneAndUpdate(
+        {
+          _id: order._id,
+          "user._id": req.user._id,
+          status: order.status,
+        },
+        { $set: { status: "Cancelled" } },
+        { new: true }
+      );
+
+      if (!cancelledOrder) {
+        return next(
+          new ErrorHandler("Order status changed. Refresh and try again.", 409)
+        );
+      }
+
+      const quantitiesByProduct = new Map();
+      for (const item of cancelledOrder.cart) {
+        const productId = item._id.toString();
+        quantitiesByProduct.set(
+          productId,
+          (quantitiesByProduct.get(productId) || 0) + Number(item.qty)
+        );
+      }
+
+      const restoredProducts = [];
+      try {
+        for (const [productId, quantity] of quantitiesByProduct) {
+          const product = await Product.findByIdAndUpdate(
+            productId,
+            {
+              $inc: {
+                stock: quantity,
+                sold_out: -quantity,
+              },
+            },
+            { new: true }
+          );
+          if (!product) {
+            throw new Error(`Product ${productId} was not found while restoring stock`);
+          }
+          restoredProducts.push({ productId, quantity });
+        }
+      } catch (error) {
+        for (const { productId, quantity } of restoredProducts) {
+          await Product.findByIdAndUpdate(productId, {
+            $inc: { stock: -quantity, sold_out: quantity },
+          });
+        }
+        await Order.findOneAndUpdate(
+          { _id: cancelledOrder._id, status: "Cancelled" },
+          { $set: { status: order.status } }
+        );
+        throw error;
+      }
+
+      try {
+        const shops = await Shop.find({
+          _id: { $in: cancelledOrder.cart.map((item) => item.shopId) },
+        });
+        await Promise.all(
+          shops
+            .filter((shop) => shop.pushSubscription)
+            .map((shop) =>
+              sendPushNotification(shop.pushSubscription, {
+                title: "Order cancelled",
+                body: `A customer cancelled order ${cancelledOrder._id}`,
+                url: "/dashboard-orders",
+                orderId: cancelledOrder._id,
+              })
+            )
+        );
+      } catch (notificationError) {
+        console.error("Order cancellation notification failed", notificationError);
+      }
+
+      res.status(200).json({
+        success: true,
+        order: cancelledOrder,
+        message:
+          "Order cancelled and stock restored. Any payment refund will be handled separately.",
+      });
     } catch (error) {
       return next(new ErrorHandler(error.message, 500));
     }
