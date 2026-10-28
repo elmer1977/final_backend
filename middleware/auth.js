@@ -45,6 +45,22 @@ exports.isAdmin = (...roles) => {
   };
 };
 
+exports.isSuperAdmin = catchAsyncErrors(async (req, res, next) => {
+  if (!req.user || req.user.role !== "Admin") {
+    return next(new ErrorHandler("Only the Super Admin can access this resource", 403));
+  }
+
+  const oldestAdmin = await User.findOne({ role: "Admin" })
+    .sort({ createdAt: 1, _id: 1 })
+    .select("_id");
+
+  if (!oldestAdmin?._id.equals(req.user._id)) {
+    return next(new ErrorHandler("Only the Super Admin can access this resource", 403));
+  }
+
+  next();
+});
+
 // Why this auth?
 // This auth is for the user to login and get the token
 // This token will be used to access the protected routes like create, update, delete, etc. (autharization)

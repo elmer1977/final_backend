@@ -1,6 +1,7 @@
 const express = require("express");
 const path = require("path");
 const crypto = require("crypto");
+const mongoose = require("mongoose");
 const User = require("../model/user");
 const Shop = require("../model/shop");
 const { upload } = require("../multer");
@@ -10,7 +11,11 @@ const jwt = require("jsonwebtoken");
 const sendMail = require("../utils/sendMail");
 const catchAsyncErrors = require("../middleware/catchAsyncErrors");
 const sendToken = require("../utils/jwtToken");
-const { isAuthenticated, isAdmin } = require("../middleware/auth");
+const {
+    isAuthenticated,
+    isAdmin,
+    isSuperAdmin,
+} = require("../middleware/auth");
 
 const {
     generateResetToken,
@@ -305,6 +310,60 @@ router.put(
       res.status(200).json({
         success: true,
         message: "Password reset successfully",
+      });
+    } catch (error) {
+      return next(new ErrorHandler(error.message, 500));
+    }
+  })
+);
+
+router.post(
+  "/admin/reset-account-password",
+  isAuthenticated,
+  isSuperAdmin,
+  catchAsyncErrors(async (req, res, next) => {
+    try {
+      const { entityType, entityId } = req.body;
+
+      if (
+        !["user", "seller"].includes(entityType) ||
+        !mongoose.Types.ObjectId.isValid(String(entityId || ""))
+      ) {
+        return next(new ErrorHandler("Invalid account selected", 400));
+      }
+
+      const AccountModel = entityType === "seller" ? Shop : User;
+      const account = await AccountModel.findById(entityId);
+      if (!account) {
+        return next(new ErrorHandler("Account not found", 404));
+      }
+
+      const resetToken = generateResetToken(account);
+      await account.save();
+
+      const resetPath =
+        entityType === "seller"
+          ? `/shop/reset-password/${resetToken}`
+          : `/reset-password/${resetToken}`;
+      const resetUrl = `${frontendUrl}/#${resetPath}`;
+
+      await sendMail({
+        email: account.email,
+        subject: "Reset your password",
+        message: `Hello ${account.name},
+
+The Super Admin requested a password reset for your account.
+
+Please click the link below to choose a new password:
+
+${resetUrl}
+
+This link will expire in 15 minutes. If you did not expect this email, please contact the site administrator.`,
+      });
+
+      res.status(200).json({
+        success: true,
+        message: "Password reset link sent to the account email",
       });
     } catch (error) {
       return next(new ErrorHandler(error.message, 500));
