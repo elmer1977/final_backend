@@ -33,7 +33,7 @@ router.post("/create-shop", upload.single("file"), async (req, res, next) => {
 
     const fileUrl = getUploadedFileUrl(req.file);
 
-    const seller = {
+    const seller = await Shop.create({
       name: req.body.name,
       email: email,
       password: req.body.password,
@@ -41,9 +41,13 @@ router.post("/create-shop", upload.single("file"), async (req, res, next) => {
       address: req.body.address,
       phoneNumber: req.body.phoneNumber,
       zipCode: req.body.zipCode,
-    };
+      isActivated: false,
+    });
 
-    const activationToken = createActivationToken(seller);
+    const activationToken = createActivationToken({
+      id: seller._id,
+      purpose: "seller-activation",
+    });
 
     const activationUrl = `${frontendUrl}/#/seller/activation/${activationToken}`;
 
@@ -87,25 +91,36 @@ router.post(
       if (!newSeller) {
         return next(new ErrorHandler("Invalid token", 400));
       }
-      const { name, email, password, avatar, zipCode, address, phoneNumber } =
-        newSeller;
-
-      let seller = await Shop.findOne({ email });
-
-      if (seller) {
-        return next(new ErrorHandler("User already exists", 400));
+      let seller;
+      if (newSeller.purpose === "seller-activation" && newSeller.id) {
+        seller = await Shop.findById(newSeller.id);
+        if (!seller) {
+          return next(new ErrorHandler("Activation shop not found", 404));
+        }
+        seller.isActivated = true;
+        await seller.save();
+      } else {
+        const { name, email, password, avatar, zipCode, address, phoneNumber } =
+          newSeller;
+        seller = await Shop.findOne({ email });
+        if (!seller) {
+          seller = await Shop.create({
+            name,
+            email,
+            avatar,
+            password,
+            zipCode,
+            address,
+            phoneNumber,
+            isActivated: true,
+          });
+        } else if (seller.isActivated === false) {
+          seller.isActivated = true;
+          await seller.save();
+        } else {
+          return next(new ErrorHandler("User already exists", 400));
+        }
       }
-
-      seller = await Shop.create({
-        name,
-        email,
-        avatar,
-        password,
-        zipCode,
-        address,
-        phoneNumber,
-      });
-
       sendShopToken(seller, 201, res);
     } catch (error) {
       return next(new ErrorHandler(error.message, 500));
@@ -138,7 +153,66 @@ router.post(
         );
       }
 
+      if (user.isActivated === false) {
+        return res.status(403).json({
+          success: false,
+          code: "ACCOUNT_NOT_ACTIVATED",
+          message: "Your seller account has not been activated yet.",
+        });
+      }
+
       sendShopToken(user, 201, res);
+    } catch (error) {
+      return next(new ErrorHandler(error.message, 500));
+    }
+  })
+);
+
+// resend activation email for an inactive seller account
+router.post(
+  "/resend-activation",
+  catchAsyncErrors(async (req, res, next) => {
+    try {
+      const { email, password } = req.body;
+      if (!email || !password) {
+        return next(
+          new ErrorHandler("Please provide your email and password", 400)
+        );
+      }
+
+      const seller = await Shop.findOne({ email }).select("+password");
+      if (!seller || seller.isActivated !== false) {
+        return next(
+          new ErrorHandler(
+            "Unable to resend activation email for this seller account",
+            400
+          )
+        );
+      }
+
+      const passwordMatches = await seller.comparePassword(password);
+      if (!passwordMatches) {
+        return next(
+          new ErrorHandler("Please provide the correct information", 400)
+        );
+      }
+
+      const activationToken = createActivationToken({
+        id: seller._id,
+        purpose: "seller-activation",
+      });
+      const activationUrl = `${frontendUrl}/#/seller/activation/${activationToken}`;
+
+      await sendMail({
+        email: seller.email,
+        subject: "Activate your Shop",
+        message: `Hello ${seller.name}, please click on the link to activate your shop: ${activationUrl}`,
+      });
+
+      res.status(200).json({
+        success: true,
+        message: `Activation email sent to ${seller.email}`,
+      });
     } catch (error) {
       return next(new ErrorHandler(error.message, 500));
     }

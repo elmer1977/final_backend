@@ -32,6 +32,10 @@ const shopSchema = new mongoose.Schema({
     type: String,
     default: "Seller",
   },
+  isActivated: {
+    type: Boolean,
+    default: true,
+  },
   avatar: {
     type: String,
     required: true,
