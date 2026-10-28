@@ -220,9 +220,13 @@ router.put(
 
       const userToNotify = await User.findById(updatedOrder.user._id);
 
-      if (req.body.status === "Delivered") {
-        const serviceCharge = updatedOrder.totalPrice * 0.1;
-        await updateSellerInfo(updatedOrder.totalPrice - serviceCharge);
+      if (
+        req.body.status === "Delivered" &&
+        existingOrder.status !== "Delivered"
+      ) {
+        const totalCents = Math.round(updatedOrder.totalPrice * 100);
+        const serviceChargeCents = Math.round(totalCents * 0.1);
+        await updateSellerInfo((totalCents - serviceChargeCents) / 100);
       }
 
       if (userToNotify?.pushSubscription) {
@@ -240,12 +244,14 @@ router.put(
       });
 
       async function updateSellerInfo(amount) {
-        const seller = await Shop.findById(req.seller.id);
+        const seller = await Shop.findByIdAndUpdate(
+          req.seller._id,
+          { $inc: { availableBalance: amount } },
+          { new: true }
+        );
         if (!seller) {
           throw new ErrorHandler("Seller not found", 404);
         }
-        seller.availableBalance = amount;
-        await seller.save();
       }
     } catch (error) {
       return next(new ErrorHandler(error.message, 500));
