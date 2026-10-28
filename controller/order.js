@@ -7,19 +7,22 @@ const Order = require("../model/order");
 const Shop = require("../model/shop");
 const User = require("../model/user");
 const Product = require("../model/product");
+const Event = require("../model/event");
 const { sendPushNotification } = require("../utils/pushNotify");
+const { getOrderPricing } = require("../utils/orderPricing");
 
 // create new order
 router.post(
   "/create-order",
   catchAsyncErrors(async (req, res, next) => {
     try {
-      const { cart, shippingAddress, user, totalPrice, paymentInfo } = req.body;
+      const { cart, shippingAddress, user, paymentInfo } = req.body;
+      const pricing = await getOrderPricing(cart);
 
       //   group cart items by shopId
       const shopItemsMap = new Map();
 
-      for (const item of cart) {
+      for (const item of pricing.cart) {
         const shopId = item.shopId;
         if (!shopItemsMap.has(shopId)) {
           shopItemsMap.set(shopId, []);
@@ -34,7 +37,8 @@ router.post(
       try {
         for (const [shopId, items] of shopItemsMap) {
           for (const item of items) {
-            const product = await Product.findOneAndUpdate(
+            const InventoryModel = item.isEvent ? Event : Product;
+            const product = await InventoryModel.findOneAndUpdate(
               { _id: item._id, stock: { $gte: item.qty } },
               { $inc: { stock: -item.qty, sold_out: item.qty } },
               { new: true }
@@ -46,7 +50,11 @@ router.post(
               );
             }
 
-            reservedStock.push({ productId: item._id, quantity: item.qty });
+            reservedStock.push({
+              productId: item._id,
+              quantity: item.qty,
+              isEvent: item.isEvent,
+            });
           }
         }
 
@@ -55,7 +63,8 @@ router.post(
             cart: items,
             shippingAddress,
             user,
-            totalPrice,
+            totalPrice: pricing.shopTotals[shopId],
+            currency: "PHP",
             paymentInfo,
             status: "Pending",
           });
@@ -78,11 +87,12 @@ router.post(
           });
         }
         await Promise.all(
-          reservedStock.map(({ productId, quantity }) =>
-            Product.findByIdAndUpdate(productId, {
+          reservedStock.map(({ productId, quantity, isEvent }) => {
+            const InventoryModel = isEvent ? Event : Product;
+            return InventoryModel.findByIdAndUpdate(productId, {
               $inc: { stock: quantity, sold_out: -quantity },
-            })
-          )
+            });
+          })
         );
         throw error;
       }
@@ -92,7 +102,11 @@ router.post(
         orders,
       });
     } catch (error) {
-      return next(new ErrorHandler(error.message, 500));
+      return next(
+        error.statusCode
+          ? error
+          : new ErrorHandler(error.message, 500)
+      );
     }
   })
 );
@@ -289,16 +303,21 @@ router.put(
       const quantitiesByProduct = new Map();
       for (const item of cancelledOrder.cart) {
         const productId = item._id.toString();
-        quantitiesByProduct.set(
+        const isEvent = item.isEvent || Boolean(item.start_Date);
+        const key = `${isEvent ? "event" : "product"}:${productId}`;
+        const existing = quantitiesByProduct.get(key);
+        quantitiesByProduct.set(key, {
           productId,
-          (quantitiesByProduct.get(productId) || 0) + Number(item.qty)
-        );
+          isEvent,
+          quantity: (existing?.quantity || 0) + Number(item.qty),
+        });
       }
 
       const restoredProducts = [];
       try {
-        for (const [productId, quantity] of quantitiesByProduct) {
-          const product = await Product.findByIdAndUpdate(
+        for (const { productId, isEvent, quantity } of quantitiesByProduct.values()) {
+          const InventoryModel = isEvent ? Event : Product;
+          const product = await InventoryModel.findByIdAndUpdate(
             productId,
             {
               $inc: {
@@ -311,11 +330,12 @@ router.put(
           if (!product) {
             throw new Error(`Product ${productId} was not found while restoring stock`);
           }
-          restoredProducts.push({ productId, quantity });
+          restoredProducts.push({ productId, quantity, isEvent });
         }
       } catch (error) {
-        for (const { productId, quantity } of restoredProducts) {
-          await Product.findByIdAndUpdate(productId, {
+        for (const { productId, quantity, isEvent } of restoredProducts) {
+          const InventoryModel = isEvent ? Event : Product;
+          await InventoryModel.findByIdAndUpdate(productId, {
             $inc: { stock: -quantity, sold_out: quantity },
           });
         }
