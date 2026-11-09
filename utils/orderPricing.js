@@ -12,7 +12,6 @@ const getOrderPricing = async (cart) => {
   const shopTotals = {};
   const quantitiesByItem = new Map();
   let subTotalCents = 0;
-  let shippingCents = 0;
 
   for (const item of cart) {
     if (
@@ -54,9 +53,9 @@ const getOrderPricing = async (cart) => {
     const lineTotalCents = unitPriceCents * quantity;
     const shopId = String(catalogItem.shopId);
     if (!shopTotals[shopId]) {
-      shopTotals[shopId] = { subTotalCents: 0, shippingCents: 0, totalCents: 0 };
+      shopTotals[shopId] = 0;
     }
-    shopTotals[shopId].subTotalCents += lineTotalCents;
+    shopTotals[shopId] += lineTotalCents;
     subTotalCents += lineTotalCents;
 
     items.push({
@@ -71,21 +70,15 @@ const getOrderPricing = async (cart) => {
     });
   }
 
-  for (const totals of Object.values(shopTotals)) {
-    totals.shippingCents = Math.round(totals.subTotalCents * 0.1);
-    totals.totalCents = totals.subTotalCents + totals.shippingCents;
-    shippingCents += totals.shippingCents;
-  }
-
   return {
     cart: items,
     subTotalPrice: subTotalCents / 100,
-    shipping: shippingCents / 100,
-    totalPrice: (subTotalCents + shippingCents) / 100,
+    shipping: 0,
+    totalPrice: subTotalCents / 100,
     shopTotals: Object.fromEntries(
       Object.entries(shopTotals).map(([shopId, totals]) => [
         shopId,
-        totals.totalCents / 100,
+        totals / 100,
       ])
     ),
   };
