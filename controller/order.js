@@ -265,12 +265,10 @@ router.put(
   isAuthenticated,
   catchAsyncErrors(async (req, res, next) => {
     try {
-      const order = await Order.findOne({
-        _id: req.params.id,
-        "user._id": req.user._id,
-      });
+      const order = await Order.findById(req.params.id);
+      const authenticatedUserId = String(req.user._id);
 
-      if (!order) {
+      if (!order || String(order.user?._id) !== authenticatedUserId) {
         return next(new ErrorHandler("Order not found", 404));
       }
 
@@ -293,7 +291,7 @@ router.put(
       const cancelledOrder = await Order.findOneAndUpdate(
         {
           _id: order._id,
-          "user._id": req.user._id,
+          "user._id": { $in: [authenticatedUserId, req.user._id] },
           status: order.status,
         },
         { $set: { status: "Cancelled" } },
