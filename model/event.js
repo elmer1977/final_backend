@@ -30,6 +30,7 @@ const eventSchema = new mongoose.Schema({
   },
   originalPrice: {
     type: Number,
+    required: [true, "Please enter the event product price!"],
   },
   discountPrice: {
     type: Number,

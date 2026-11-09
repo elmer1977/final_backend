@@ -110,12 +110,12 @@ router.get(
       }
 
       if (minPrice || maxPrice) {
-        filter.discountPrice = {};
+        filter.originalPrice = {};
         if (minPrice) {
-          filter.discountPrice.$gte = Number(minPrice);
+          filter.originalPrice.$gte = Number(minPrice);
         }
         if (maxPrice) {
-          filter.discountPrice.$lte = Number(maxPrice);
+          filter.originalPrice.$lte = Number(maxPrice);
         }
       }
 
@@ -127,9 +127,9 @@ router.get(
 
       let sortOption = { createdAt: -1 };
       if (sort === "priceAsc") {
-        sortOption = { discountPrice: 1 };
+        sortOption = { originalPrice: 1 };
       } else if (sort === "priceDesc") {
-        sortOption = { discountPrice: -1 };
+        sortOption = { originalPrice: -1 };
       } else if (sort === "oldest") {
         sortOption = { createdAt: 1 };
       }

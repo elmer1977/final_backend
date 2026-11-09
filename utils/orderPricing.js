@@ -42,14 +42,12 @@ const getOrderPricing = async (cart) => {
       );
     }
 
-    const originalPrice = Number(catalogItem.originalPrice);
-    const currentPrice = Number(catalogItem.discountPrice);
-    const unitPrice =
-      Number.isFinite(originalPrice) && originalPrice > 0
-        ? originalPrice
-        : currentPrice;
+    const unitPrice = Number(catalogItem.originalPrice);
     if (!Number.isFinite(unitPrice) || unitPrice < 0) {
-      throw new ErrorHandler(`${catalogItem.name} has an invalid price.`, 400);
+      throw new ErrorHandler(
+        `${catalogItem.name} has no valid undiscounted price. Update its price before ordering.`,
+        400
+      );
     }
 
     const unitPriceCents = Math.round(unitPrice * 100);
