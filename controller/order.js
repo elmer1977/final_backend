@@ -75,7 +75,7 @@ router.post(
             await sendPushNotification(shop.pushSubscription, {
               title: "New order received",
               body: `You have a new order from ${user?.name || "a customer"}`,
-              url: "/dashboard-orders",
+              url: `/order/${order._id}`,
               orderId: order._id,
             });
           }
@@ -355,7 +355,7 @@ router.put(
               sendPushNotification(shop.pushSubscription, {
                 title: "Order cancelled",
                 body: `A customer cancelled order ${cancelledOrder._id}`,
-                url: "/dashboard-orders",
+                url: `/order/${cancelledOrder._id}`,
                 orderId: cancelledOrder._id,
               })
             )
