@@ -260,7 +260,7 @@ router.put(
   })
 );
 
-// cancel an order before it is on the way
+// Customers can cancel orders only while they are pending.
 router.put(
   "/cancel-order/:id",
   isAuthenticated,
@@ -273,17 +273,10 @@ router.put(
         return next(new ErrorHandler("Order not found", 404));
       }
 
-      const cancellableStatuses = [
-        "Pending",
-        "Processing",
-        "Transferred to delivery partner",
-        "Shipping",
-        "Received",
-      ];
-      if (!cancellableStatuses.includes(order.status)) {
+      if (order.status !== "Pending") {
         return next(
           new ErrorHandler(
-            "This order can no longer be cancelled because it is already on the way or completed",
+            "This order can only be cancelled while its status is Pending",
             400
           )
         );
@@ -293,7 +286,7 @@ router.put(
         {
           _id: order._id,
           "user._id": { $in: [authenticatedUserId, req.user._id] },
-          status: order.status,
+          status: "Pending",
         },
         { $set: { status: "Cancelled" } },
         { new: true }
