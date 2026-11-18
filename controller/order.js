@@ -170,9 +170,10 @@ router.put(
         return next(new ErrorHandler("Invalid order status", 400));
       }
 
+      const sellerIdValues = [String(req.seller._id), req.seller._id];
       const existingOrder = await Order.findOne({
         _id: req.params.id,
-        "cart.shopId": req.seller._id,
+        "cart.shopId": { $in: sellerIdValues },
       });
 
       if (!existingOrder) {
@@ -205,7 +206,7 @@ router.put(
       const updatedOrder = await Order.findOneAndUpdate(
         {
           _id: existingOrder._id,
-          "cart.shopId": req.seller._id,
+          "cart.shopId": { $in: sellerIdValues },
           status: existingOrder.status,
         },
         { $set: statusUpdate },
